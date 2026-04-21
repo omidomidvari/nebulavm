@@ -1,0 +1,14 @@
+// package.json
+{
+  "name": "nebulavm-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsc --watch",
+    "dbjson": "echo json operational! :)"
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
