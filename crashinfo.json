@@ -1,0 +1,6 @@
+{ 
+    "runcrashruntime" : "true",
+    "runtimemode": "default_02",
+    "$schema": "https://json-schema.org/draft-04/schema#",
+    "var": "true"
+}
