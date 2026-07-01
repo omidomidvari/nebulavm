@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",
-    "dbjson": "echo json operational! :)"
+    "dbjson": "echo json operational! :)",
     "build": "tsc"
   },
   "devDependencies": {
