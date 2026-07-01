@@ -1,5 +1,5 @@
 # 🌌 NebulaVM Dev SDK
-**Version 1.1 alpha**  
+**Version 2.0 alpha**  
 **License:** GNU General Public License v3 (GPL-3.0)
 
 ---
