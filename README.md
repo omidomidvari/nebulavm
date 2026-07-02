@@ -94,6 +94,3 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 ### notes
 - when updated above 4.0 alpha it will move on to beta versions
   
-- [ ] 
-- [ ] **Debugger UI:** A real-time visualizer for the memory grid and register state.
-- [ ] **Node-Bridge:** A CLI tool to run NVM binaries directly from the terminal.
