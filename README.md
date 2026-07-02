@@ -90,7 +90,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 ---
 
 ## 🛠 Planned Roadmap
-** No more roadmap available. for info go to the wiki page "roadmap"**
+**No more roadmap available. for info go to the wiki page "roadmap"**
 ### notes
 - when updated above 4.0 alpha it will move on to beta versions
   
