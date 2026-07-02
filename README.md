@@ -90,7 +90,10 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 ---
 
 ## 🛠 Planned Roadmap
-- [ ] **Interrupt Support:** Handling hardware triggers without polling.
-- [ ] **Stack Pointer:** Adding `PUSH` and `POP` for subroutine support.
+** No more roadmap available. for info go to the wiki page "roadmap"**
+### notes
+- when updated above 4.0 alpha it will move on to beta versions
+  
+- [ ] 
 - [ ] **Debugger UI:** A real-time visualizer for the memory grid and register state.
 - [ ] **Node-Bridge:** A CLI tool to run NVM binaries directly from the terminal.
