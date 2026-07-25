@@ -92,7 +92,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 ## 🛠 Planned Roadmap
 ## Short checklist
 
-- [ ] Add GitHub Actions CI: run `npm ci`, `npm run build`, and `npm test` on PRs
+- [x] Add GitHub Actions CI: run `npm ci`, `npm run build`, and `npm test` on PRs
 - [ ] Create `src/interrupt.ts` (InterruptController stub) to satisfy imports
 - [ ] Migrate core: move `nebulavm.js` → `src/nebulavm.ts` and ensure `tsc` passes
 - [ ] Add unit tests for core opcodes (LDA, LDB, ADD, SUB, JMP, HLT, DIV-by-zero)
