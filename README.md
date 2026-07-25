@@ -90,7 +90,15 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 ---
 
 ## 🛠 Planned Roadmap
-**No more roadmap available. for info go to the wiki page "roadmap"**
+## Short checklist
+
+- [ ] Add GitHub Actions CI: run `npm ci`, `npm run build`, and `npm test` on PRs
+- [ ] Create `src/interrupt.ts` (InterruptController stub) to satisfy imports
+- [ ] Migrate core: move `nebulavm.js` → `src/nebulavm.ts` and ensure `tsc` passes
+- [ ] Add unit tests for core opcodes (LDA, LDB, ADD, SUB, JMP, HLT, DIV-by-zero)
+- [ ] Fix assembler filename/imports and add basic assembler tests
+- [ ] Add `ROADMAP.md` and update README to link to it
+- [ ] Run CI and confirm green build + tests on `main`
 ### notes
 - when updated above 4.0 alpha it will move on to beta versions
   
