@@ -99,6 +99,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 - [ ] Fix assembler filename/imports and add basic assembler tests
 - [ ] Add `ROADMAP.md` and update README to link to it
 - [ ] Run CI and confirm green build + tests on `main`
+- [ ] add stability manager as `src/stability.js`
 ### notes
 - when updated above 4.0 alpha it will move on to beta versions
   
