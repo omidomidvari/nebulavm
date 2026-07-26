@@ -97,7 +97,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 - [ ] Migrate core: move `nebulavm.js` → `src/nebulavm.ts` and ensure `tsc` passes
 - [ ] Add unit tests for core opcodes (LDA, LDB, ADD, SUB, JMP, HLT, DIV-by-zero)
 - [ ] Fix assembler filename/imports and add basic assembler tests
-- [ ] Add `ROADMAP.md` and update README to link to it
+- [x] Add `ROADMAP.md` and update README to link to it
 - [ ] Run CI and confirm green build + tests on `main`
 - [x] add stability manager as `src/stability.js`
 ### notes
