@@ -1,5 +1,7 @@
 # 🌌 NebulaVM Development Roadmap
 
+**📖 Back to [README.md](./README.md)**
+
 ## Version 2.0 - Alpha Release
 
 ### ✅ Completed
@@ -150,7 +152,7 @@ v2.0 Alpha          v2.0 Beta           v3.0 Stable
 - [x] README with overview
 - [x] Hardware specifications
 - [x] Development workflow
-- [ ] **ROADMAP** (this file)
+- [x] **ROADMAP** (this file)
 - [ ] Getting started guide
 - [ ] API documentation
 
@@ -227,3 +229,5 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) (when available) for how to:
 **Last Updated:** July 26, 2026  
 **Maintained By:** homemovie  
 **License:** GPL-3.0
+
+📖 [Back to README.md](./README.md)
