@@ -93,13 +93,13 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 ## Short checklist
 
 - [x] Add GitHub Actions CI: run `npm ci`, `npm run build`, and `npm test` on PRs
-- [ ] Create `src/interrupt.ts` (InterruptController stub) to satisfy imports
+- [x] Create `src/interrupt.ts` (InterruptController stub) to satisfy imports
 - [ ] Migrate core: move `nebulavm.js` → `src/nebulavm.ts` and ensure `tsc` passes
 - [ ] Add unit tests for core opcodes (LDA, LDB, ADD, SUB, JMP, HLT, DIV-by-zero)
 - [ ] Fix assembler filename/imports and add basic assembler tests
 - [ ] Add `ROADMAP.md` and update README to link to it
 - [ ] Run CI and confirm green build + tests on `main`
-- [ ] add stability manager as `src/stability.js`
+- [x] add stability manager as `src/stability.js`
 ### notes
 - when updated above 4.0 alpha it will move on to beta versions
   
