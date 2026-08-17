@@ -102,4 +102,4 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 - [x] add stability manager as `src/stability.js`
 ### notes
 - when updated above 4.0 alpha it will move on to beta versions
-  
+- CRITICAL: ERRORS IN CODE  
