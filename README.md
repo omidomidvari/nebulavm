@@ -5,9 +5,9 @@
 ---
 
 ## 📜 Overview
-NebulaVM is a high-performance, strictly non-WASM virtual machine and development ecosystem designed for low-level architectural simulation. It provides a bridge between pure mathematical 8-bit processing and modern web-based graphical outputs. 
+NebulaVM is a high-performance, strictly non-WASM virtual machine and development ecosystem designed for low-level architectural simulation. It provides a bridge between pure mathematical 8-bit programming and modern developer tools.
 
-Unlike traditional emulators, NebulaVM is designed as a **Developer SDK**. It abstracts the complexity of 8-bit hardware into a modular TypeScript/JavaScript environment, allowing developers to build, flash, and debug programs that interact with virtualized hardware via Memory-Mapped I/O (MMIO).
+Unlike traditional emulators, NebulaVM is designed as a **Developer SDK**. It abstracts the complexity of 8-bit hardware into a modular TypeScript/JavaScript environment, allowing developers to build, test, and deploy bytecode in seconds.
 
 ### Core Philosophy
 - **Authentic Constraints:** Operates on a strict 8-bit logic (0-255) with register-based math.
@@ -30,6 +30,8 @@ The SDK is organized into a distributed file structure to separate the concerns 
 *   `uiengine.ts`: The visual synthesizer. It monitors specific memory addresses (VRAM) and translates them into pixels on an HTML5 Canvas.
 *   `render.ts`: High-performance drawing routines optimized for 8-bit coordinate systems.
 *   `math.ts`: The arithmetic unit. Handles 8-bit bitwise operations, overflow wrapping, and hex conversions.
+*   `interrupt.ts`: Interrupt controller for hardware event handling.
+*   `stability.js`: Crash detection and recovery system.
 
 ### `/filemgr/` (Storage & Persistence)
 *   `fileengine.ts`: A virtualized disk controller. It handles the serialization of bytecode and allows for persistent program storage using `localStorage` or local file blobs.
@@ -43,7 +45,7 @@ The SDK is organized into a distributed file structure to separate the concerns 
 | Component | Specification | Description |
 | :--- | :--- | :--- |
 | **CPU Architecture** | 8-bit RISC-sim | Custom instruction set with 1-byte opcodes. |
-| **Registers** | A, B, PC, ZF | Accumulator, General Register, Program Counter, Zero Flag. |
+| **Registers** | A, B, PC, ZF, CF, OF | Accumulator, General Register, Program Counter, Zero Flag, Carry Flag, Overflow Flag. |
 | **Memory (RAM)** | 256 Bytes | Shared space for instructions, data, and I/O. |
 | **Clock Speed** | Variable | Driven by `requestAnimationFrame` or `setInterval` for console use. |
 | **Video Out** | MMIO (0xFF) | Maps memory address 255 to a 256px horizontal buffer. |
@@ -89,17 +91,36 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 
 ---
 
-## 🛠 Planned Roadmap
-## Short checklist
+## 📚 Documentation
 
+See the **[ROADMAP.md](./ROADMAP.md)** for detailed development milestones, planned features, and version timeline.
+
+---
+
+## 🛠 Development Status
+
+### ✅ Completed Tasks
 - [x] Add GitHub Actions CI: run `npm ci`, `npm run build`, and `npm test` on PRs
 - [x] Create `src/interrupt.ts` (InterruptController stub) to satisfy imports
-- [ ] Migrate core: move `nebulavm.js` → `src/nebulavm.ts` and ensure `tsc` passes
-- [ ] Add unit tests for core opcodes (LDA, LDB, ADD, SUB, JMP, HLT, DIV-by-zero)
-- [ ] Fix assembler filename/imports and add basic assembler tests
 - [x] Add `ROADMAP.md` and update README to link to it
-- [ ] Run CI and confirm green build + tests on `main`
-- [x] add stability manager as `src/stability.js`
-### notes
-- when updated above 4.0 alpha it will move on to beta versions
-- CRITICAL: ERRORS IN CODE  
+- [x] Add stability manager as `src/stability.js`
+- [x] Comprehensive unit tests for core opcodes (30+ test cases in `tests/opcodes.test.js`)
+
+### 🚧 In Progress / Pending
+- [ ] Migrate core: move `nebulavm.js` → `src/nebulavm.ts` and ensure `tsc` passes
+- [ ] Fix assembler filename/imports and add basic assembler tests
+- [ ] Run CI and confirm green build + tests on `main` (currently blocked by missing lock file)
+- [ ] Add integration tests combining multiple opcodes
+- [ ] Create developer documentation (Getting Started guide)
+- [ ] Performance benchmarking suite
+
+### 📝 Notes
+- All core opcodes have been implemented and unit tested
+- CI workflow is set up but requires `package-lock.json` or `yarn.lock` to run successfully
+- TypeScript migration is next priority for v2.0 beta
+- When version reaches 4.0+, release versioning will transition from alpha to beta versions
+
+### ⚠️ Known Issues
+- **CRITICAL:** Code errors need to be addressed before stable release
+- Missing dependency lock file causing CI failures
+- TypeScript compilation needs full migration from `.js` to `.ts`
