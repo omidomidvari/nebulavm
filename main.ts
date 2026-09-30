@@ -1,30 +1,20 @@
-import { NebulaVM } from './nebulavm.js';
-import { NebulaAssembler } from './nebulalaassembeler.js';
-import { UIEngine } from './src/uiengine.js';
-import { FileEngine } from './filemgr/fileengine.js';
-import { InterruptType } from './src/interrupt.js';
+import { NebulaVM } from './src/nebulavm';
+import { NebulaAssembler } from './nebulalaassembeler';
+import { UIEngine } from './src/uiengine';
+import { FileEngine } from './filemgr/fileengine';
+import { InterruptType } from './src/interrupt';
 
 const vm = new NebulaVM();
 const ui = new UIEngine('screen');
 const interruptCtrl = vm.getInterruptController();
 
-// Example: Register a timer interrupt handler
-interruptCtrl.registerHandler(
-    100, // priority
-    (vm) => {
-        console.log('Timer interrupt fired!');
-        // Handler logic here
-    }
-);
+interruptCtrl.registerHandler(100, (vm) => {
+    console.log('Timer interrupt fired!');
+});
 
-// Example: Register a keyboard interrupt handler
-interruptCtrl.registerHandler(
-    150, // higher priority
-    (vm) => {
-        console.log('Keyboard interrupt fired!');
-        // Handler logic here
-    }
-);
+interruptCtrl.registerHandler(150, (vm) => {
+    console.log('Keyboard interrupt fired!');
+});
 
 const code = `LDA 0 LDB 1 ADD STA 255 SEI`;
 const bin = NebulaAssembler.compile(code);
@@ -34,11 +24,13 @@ vm.flash(bin);
 
 function loop() {
     vm.step();
-    ui.render(vm.mem);
+    ui.render(vm.getState().memory);
     requestAnimationFrame(loop);
 }
-loop();
 
-// Expose VM to global for testing interrupts
+if (typeof window !== 'undefined') {
+    loop();
+}
+
 globalThis.nebulavm = vm;
-globalThis.raiseInterrupt = (id) => vm.raiseInterrupt(id);
+globalThis.raiseInterrupt = (id: number) => vm.raiseInterrupt(id);

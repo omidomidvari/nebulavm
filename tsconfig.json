@@ -1,11 +1,19 @@
-// tsconfig.json
-
+{
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
     "outDir": "./dist",
     "rootDir": "./",
-    "strict": true
-
-  }
-
+    "strict": true,
+    "allowJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts", "filemgr/**/*.ts", "main.ts", "tests/**/*.js", "nebulalaassembeler.js"],
+  "exclude": ["node_modules", "dist"]
+}

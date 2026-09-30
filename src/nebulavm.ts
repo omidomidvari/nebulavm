@@ -1,30 +1,19 @@
-import { InterruptController } from './interrupt';
-
-/**
- * Register set for the NebulaVM
- */
-interface Registers {
-    a: number;   // Accumulator
-    b: number;   // General Purpose Register
-    pc: number;  // Program Counter
-    zf: number;  // Zero Flag
-    cf: number;  // Carry Flag
-    of: number;  // Overflow Flag
+export interface Registers {
+    a: number;
+    b: number;
+    pc: number;
+    zf: number;
+    cf: number;
+    of: number;
 }
 
-/**
- * Execution state snapshot
- */
-interface ExecutionSnapshot {
+export interface ExecutionSnapshot {
     pc: number;
     op: number;
     registers: Registers;
 }
 
-/**
- * VM state for debugging and inspection
- */
-interface VMState {
+export interface VMState {
     halted: boolean;
     cycleCount: number;
     registers: Registers;
@@ -32,29 +21,21 @@ interface VMState {
     pc: number;
 }
 
-/**
- * Debug information packet
- */
-interface DebugInfo {
+export interface DebugInfo {
     debugLog: string[];
     executionHistory: ExecutionSnapshot[];
     currentState: VMState;
 }
 
-/**
- * Execution result
- */
-interface ExecutionResult {
+export interface ExecutionResult {
     cyclesRun: number;
     totalCycles: number;
     halted: boolean;
     registers: Registers;
 }
 
-/**
- * NebulaVM - A high-performance 8-bit virtual machine
- * Version 2.0 - Enhanced instruction set, better debugging, improved performance
- */
+import { InterruptController } from './interrupt';
+
 export class NebulaVM {
     private memSize: number;
     private mem: Uint8Array;
@@ -71,12 +52,12 @@ export class NebulaVM {
         this.memSize = memSize;
         this.mem = new Uint8Array(memSize);
         this.regs = {
-            a: 0,    // Accumulator
-            b: 0,    // General Purpose Register
-            pc: 0,   // Program Counter
-            zf: 0,   // Zero Flag
-            cf: 0,   // Carry Flag
-            of: 0    // Overflow Flag
+            a: 0,
+            b: 0,
+            pc: 0,
+            zf: 0,
+            cf: 0,
+            of: 0,
         };
         this.halted = true;
         this.cycleCount = 0;
@@ -87,9 +68,6 @@ export class NebulaVM {
         this.maxHistorySize = 100;
     }
 
-    /**
-     * Load binary into memory and reset VM state
-     */
     flash(bytes: Uint8Array): void {
         if (!(bytes instanceof Uint8Array)) {
             throw new Error('flash() expects Uint8Array');
@@ -97,6 +75,7 @@ export class NebulaVM {
         if (bytes.length > this.memSize) {
             throw new Error(`Program too large: ${bytes.length} > ${this.memSize}`);
         }
+
         this.mem.fill(0);
         this.mem.set(bytes);
         this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
@@ -104,16 +83,13 @@ export class NebulaVM {
         this.cycleCount = 0;
         this.debugLog = [];
         this.executionHistory = [];
+
         if (this.enableDebug) {
             this.debug(`Program flashed: ${bytes.length} bytes`);
         }
     }
 
-    /**
-     * Execute one instruction cycle
-     */
     step(): void {
-        // Process any pending interrupts before executing instruction
         this.interruptController.processPendingInterrupts(this);
 
         if (this.halted) return;
@@ -125,7 +101,6 @@ export class NebulaVM {
             this.debug(`PC: 0x${currentPC.toString(16).padStart(2, '0')} | OP: 0x${op.toString(16).padStart(2, '0')}`);
         }
 
-        // Record execution history
         this.recordExecution(currentPC, op);
 
         try {
@@ -170,24 +145,20 @@ export class NebulaVM {
         this.cycleCount++;
     }
 
-    /**
-     * Run until HALT or max cycles reached
-     */
     run(maxCycles: number = 10000): ExecutionResult {
         let cycles = 0;
         while (!this.halted && cycles < maxCycles) {
             this.step();
             cycles++;
         }
+
         return {
             cyclesRun: cycles,
             totalCycles: this.cycleCount,
             halted: this.halted,
-            registers: { ...this.regs }
+            registers: { ...this.regs },
         };
     }
-
-    // ============ INSTRUCTION IMPLEMENTATIONS ============
 
     private instr_HLT(): void {
         this.halted = true;
@@ -208,8 +179,8 @@ export class NebulaVM {
 
     private instr_ADD(): void {
         const result = this.regs.a + this.regs.b;
-        this.regs.cf = result > 0xFF ? 1 : 0;
-        this.regs.a = result & 0xFF;
+        this.regs.cf = result > 0xff ? 1 : 0;
+        this.regs.a = result & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`ADD: A(0x${this.regs.a.toString(16).padStart(2, '0')}) + B = 0x${result.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
     }
@@ -217,7 +188,7 @@ export class NebulaVM {
     private instr_SUB(): void {
         const result = this.regs.a - this.regs.b;
         this.regs.cf = result < 0 ? 1 : 0;
-        this.regs.a = result & 0xFF;
+        this.regs.a = result & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`SUB: A(0x${this.regs.a.toString(16).padStart(2, '0')}) - B = 0x${result.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
     }
@@ -232,8 +203,8 @@ export class NebulaVM {
         if (this.regs.zf) {
             this.regs.pc = addr;
             if (this.enableDebug) this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (taken)`);
-        } else {
-            if (this.enableDebug) this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (not taken)`);
+        } else if (this.enableDebug) {
+            this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (not taken)`);
         }
     }
 
@@ -255,20 +226,21 @@ export class NebulaVM {
 
     private instr_MUL(): void {
         const result = this.regs.a * this.regs.b;
-        this.regs.cf = result > 0xFF ? 1 : 0;
-        this.regs.a = result & 0xFF;
+        this.regs.cf = result > 0xff ? 1 : 0;
+        this.regs.a = result & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`MUL: A(0x${this.regs.a.toString(16).padStart(2, '0')}) * B = 0x${result.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
     }
 
     private instr_DIV(): void {
         if (this.regs.b === 0) {
-            this.raiseInterrupt(0x06); // MATH_ERROR
+            this.raiseInterrupt(0x06);
             if (this.enableDebug) this.debug('DIV: Division by zero!');
             return;
         }
+
         const result = Math.floor(this.regs.a / this.regs.b);
-        this.regs.a = result & 0xFF;
+        this.regs.a = result & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`DIV: A(0x${this.regs.a.toString(16).padStart(2, '0')}) / B = 0x${result.toString(16).padStart(2, '0')}`);
     }
@@ -292,14 +264,14 @@ export class NebulaVM {
     }
 
     private instr_NOT(): void {
-        this.regs.a = (~this.regs.a) & 0xFF;
+        this.regs.a = (~this.regs.a) & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`NOT: A = ~A -> 0x${this.regs.a.toString(16).padStart(2, '0')}`);
     }
 
     private instr_SHL(): void {
         this.regs.cf = (this.regs.a & 0x80) ? 1 : 0;
-        this.regs.a = (this.regs.a << 1) & 0xFF;
+        this.regs.a = (this.regs.a << 1) & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`SHL: A <<= 1 -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
     }
@@ -343,8 +315,8 @@ export class NebulaVM {
 
     private instr_INC(): void {
         const result = this.regs.a + 1;
-        this.regs.cf = result > 0xFF ? 1 : 0;
-        this.regs.a = result & 0xFF;
+        this.regs.cf = result > 0xff ? 1 : 0;
+        this.regs.a = result & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`INC: A++ -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
     }
@@ -352,7 +324,7 @@ export class NebulaVM {
     private instr_DEC(): void {
         const result = this.regs.a - 1;
         this.regs.cf = result < 0 ? 1 : 0;
-        this.regs.a = result & 0xFF;
+        this.regs.a = result & 0xff;
         this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`DEC: A-- -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
     }
@@ -366,10 +338,8 @@ export class NebulaVM {
         if (this.enableDebug) this.debug('NOP: No operation');
     }
 
-    // ============ UTILITY METHODS ============
-
     private updateZeroFlag(value: number): void {
-        this.regs.zf = (value === 0) ? 1 : 0;
+        this.regs.zf = value === 0 ? 1 : 0;
     }
 
     private debug(message: string): void {
@@ -388,42 +358,33 @@ export class NebulaVM {
         }
     }
 
-    public getInterruptController(): InterruptController {
+    getInterruptController(): InterruptController {
         return this.interruptController;
     }
 
-    public raiseInterrupt(interruptId: number): void {
+    raiseInterrupt(interruptId: number): void {
         this.interruptController.raiseInterrupt(interruptId);
     }
 
-    /**
-     * Get current VM state
-     */
-    public getState(): VMState {
+    getState(): VMState {
         return {
             halted: this.halted,
             cycleCount: this.cycleCount,
             registers: { ...this.regs },
             memory: new Uint8Array(this.mem),
-            pc: this.regs.pc
+            pc: this.regs.pc,
         };
     }
 
-    /**
-     * Get debug information
-     */
-    public getDebugInfo(): DebugInfo {
+    getDebugInfo(): DebugInfo {
         return {
             debugLog: [...this.debugLog],
             executionHistory: [...this.executionHistory],
-            currentState: this.getState()
+            currentState: this.getState(),
         };
     }
 
-    /**
-     * Reset VM to initial state
-     */
-    public reset(): void {
+    reset(): void {
         this.mem.fill(0);
         this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
         this.halted = true;
@@ -432,3 +393,5 @@ export class NebulaVM {
         this.executionHistory = [];
     }
 }
+
+export default NebulaVM;
