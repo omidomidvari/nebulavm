@@ -1,3 +1,5 @@
+import { InterruptController } from './interrupt.js';
+
 export interface Registers {
     a: number;
     b: number;
@@ -33,8 +35,6 @@ export interface ExecutionResult {
     halted: boolean;
     registers: Registers;
 }
-
-import { InterruptController } from './interrupt';
 
 export class NebulaVM {
     private memSize: number;

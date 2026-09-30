@@ -1,8 +1,8 @@
-import { NebulaVM } from './src/nebulavm';
-import { NebulaAssembler } from './nebulalaassembeler';
-import { UIEngine } from './src/uiengine';
-import { FileEngine } from './filemgr/fileengine';
-import { InterruptType } from './src/interrupt';
+import { NebulaVM } from './src/nebulavm.js';
+import { NebulaAssembler } from './nebulalaassembeler.js';
+import { UIEngine } from './src/uiengine.js';
+import { FileEngine } from './filemgr/fileengine.js';
+import { InterruptType } from './src/interrupt.js';
 
 const vm = new NebulaVM();
 const ui = new UIEngine('screen');
