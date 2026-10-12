@@ -168,12 +168,14 @@ export class NebulaVM {
     private instr_LDA(): void {
         const val = this.mem[this.regs.pc++];
         this.regs.a = val;
+        this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`LDA 0x${val.toString(16).padStart(2, '0')} -> A`);
     }
 
     private instr_LDB(): void {
         const val = this.mem[this.regs.pc++];
         this.regs.b = val;
+        this.updateZeroFlag(this.regs.b);
         if (this.enableDebug) this.debug(`LDB 0x${val.toString(16).padStart(2, '0')} -> B`);
     }
 
@@ -194,8 +196,10 @@ export class NebulaVM {
     }
 
     private instr_CMP(): void {
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`CMP: A=0x${this.regs.a.toString(16).padStart(2, '0')}, ZF=${this.regs.zf}`);
+        const result = this.regs.a - this.regs.b;
+        this.regs.cf = result < 0 ? 1 : 0;
+        this.updateZeroFlag(result & 0xff);
+        if (this.enableDebug) this.debug(`CMP: A=0x${this.regs.a.toString(16).padStart(2, '0')}, B=0x${this.regs.b.toString(16).padStart(2, '0')}, ZF=${this.regs.zf}, CF=${this.regs.cf}`);
     }
 
     private instr_JZ(): void {

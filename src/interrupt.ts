@@ -5,6 +5,7 @@
 
 export interface InterruptHandler {
     id: number;
+    interruptId: number;
     priority: number;
     callback: (vm: any) => void;
     enabled: boolean;
@@ -19,18 +20,19 @@ export class InterruptController {
 
     /**
      * Register an interrupt handler
-     * @param priority Higher numbers = higher priority (0-255)
+     * @param interruptId The interrupt source to match when raised
      * @param callback Function to execute when interrupt fires
      * @returns Handler ID for later reference
      */
     public registerHandler(
-        priority: number,
+        interruptId: number,
         callback: (vm: any) => void
     ): number {
         const id = this.nextHandlerId++;
         const handler: InterruptHandler = {
             id,
-            priority: Math.min(255, Math.max(0, priority)),
+            interruptId,
+            priority: Math.min(255, Math.max(0, interruptId)),
             callback,
             enabled: true,
         };
@@ -87,9 +89,9 @@ export class InterruptController {
         // Execute all pending interrupt handlers
         while (this.interruptQueue.length > 0) {
             const interruptId = this.interruptQueue.shift();
-            
-            // Find matching handler
-            const handler = sortedHandlers.find(h => h.id === interruptId);
+            if (interruptId === undefined) continue;
+
+            const handler = sortedHandlers.find(h => h.interruptId === interruptId);
             if (handler) {
                 this.currentInterrupt = handler.id;
                 handler.callback(vm);
