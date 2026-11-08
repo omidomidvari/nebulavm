@@ -2,35 +2,70 @@ import { NebulaVM } from './src/nebulavm.js';
 import { NebulaAssembler } from './nebulalaassembeler.js';
 import { UIEngine } from './src/uiengine.js';
 import { FileEngine } from './filemgr/fileengine.js';
-import { InterruptType } from './src/interrupt.js';
+import { triggerCrashScreen } from './crashscreen.js';
 
 const vm = new NebulaVM();
 const ui = new UIEngine('screen');
 const interruptCtrl = vm.getInterruptController();
 
-interruptCtrl.registerHandler(100, (vm) => {
-    console.log('Timer interrupt fired!');
+interruptCtrl.registerHandler(100, () => {
+  console.log('Timer interrupt fired!');
 });
 
-interruptCtrl.registerHandler(150, (vm) => {
-    console.log('Keyboard interrupt fired!');
+interruptCtrl.registerHandler(150, () => {
+  console.log('Keyboard interrupt fired!');
 });
 
-const code = `LDA 0 LDB 1 ADD STA 255 SEI`;
-const bin = NebulaAssembler.compile(code);
+const programSource = `
+  LDA 0
+  LDB 1
+  ADD
+  STA 255
+  SEI
+  HLT
+`;
 
+const bin = NebulaAssembler.compile(programSource);
 FileEngine.save('boot', bin);
 vm.flash(bin);
 
 function loop() {
+  try {
     vm.step();
     ui.render(vm.getState().memory);
-    requestAnimationFrame(loop);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(loop);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    triggerCrashScreen('NEBULA_SYSTEM_FAILURE', {
+      source: 'main.ts',
+      reason: message,
+      stack: error instanceof Error ? error.stack || '' : ''
+    });
+    throw error;
+  }
 }
 
 if (typeof window !== 'undefined') {
-    loop();
+  window.addEventListener('error', (event) => {
+    triggerCrashScreen('NEBULA_SYSTEM_FAILURE', {
+      source: 'window.error',
+      reason: event.message,
+      stack: event.error?.stack || ''
+    });
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    triggerCrashScreen('NEBULA_SYSTEM_FAILURE', {
+      source: 'unhandledrejection',
+      reason: String(event.reason),
+      stack: event.reason?.stack || ''
+    });
+  });
+
+  loop();
 }
 
-globalThis.nebulavm = vm;
-globalThis.raiseInterrupt = (id: number) => vm.raiseInterrupt(id);
+(globalThis as any).nebulavm = vm;
+(globalThis as any).raiseInterrupt = (id: number) => vm.raiseInterrupt(id);

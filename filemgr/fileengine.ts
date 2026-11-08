@@ -1,11 +1,24 @@
 export class FileEngine {
+    private static memoryStore = new Map<string, string>();
+
     static save(name: string, data: Uint8Array) {
-        localStorage.setItem(`nvm_file_${name}`, btoa(String.fromCharCode(...data)));
+        const payload = btoa(String.fromCharCode(...data));
+
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(`nvm_file_${name}`, payload);
+            return;
+        }
+
+        this.memoryStore.set(`nvm_file_${name}`, payload);
     }
 
     static load(name: string): Uint8Array | null {
-        const raw = localStorage.getItem(`nvm_file_${name}`);
+        const key = `nvm_file_${name}`;
+        const raw = typeof localStorage !== 'undefined'
+            ? localStorage.getItem(key)
+            : this.memoryStore.get(key);
+
         if (!raw) return null;
-        return new Uint8Array(atob(raw).split("").map(c => c.charCodeAt(0)));
+        return new Uint8Array(atob(raw).split('').map((char) => char.charCodeAt(0)));
     }
 }
