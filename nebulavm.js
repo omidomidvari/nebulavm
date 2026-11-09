@@ -5,16 +5,31 @@ import { InterruptController } from './src/interrupt.js';
  * Version 2.0 - Enhanced instruction set, better debugging, improved performance
  */
 export class NebulaVM {
+    memSize;
+    mem;
+    regs;
+    halted;
+    cycleCount;
+    interruptController;
+    enableDebug;
+    debugLog;
+    executionHistory;
+    maxHistorySize;
+
     constructor(memSize = 256, enableDebug = false) {
+        if (!Number.isInteger(memSize) || memSize < 1 || memSize > 256) {
+            throw new RangeError('memSize must be an integer from 1 to 256.');
+        }
+
         this.memSize = memSize;
         this.mem = new Uint8Array(memSize);
         this.regs = {
-            a: 0,    // Accumulator
-            b: 0,    // General Purpose Register
-            pc: 0,   // Program Counter
-            zf: 0,   // Zero Flag
-            cf: 0,   // Carry Flag
-            of: 0    // Overflow Flag
+            a: 0,
+            b: 0,
+            pc: 0,
+            zf: 0,
+            cf: 0,
+            of: 0,
         };
         this.halted = true;
         this.cycleCount = 0;
@@ -25,16 +40,14 @@ export class NebulaVM {
         this.maxHistorySize = 100;
     }
 
-    /**
-     * Load binary into memory and reset VM state
-     */
     flash(bytes) {
         if (!(bytes instanceof Uint8Array)) {
-            throw new Error('flash() expects Uint8Array');
+            throw new TypeError('flash() expects Uint8Array');
         }
         if (bytes.length > this.memSize) {
-            throw new Error(`Program too large: ${bytes.length} > ${this.memSize}`);
+            throw new RangeError(`Program too large: ${bytes.length} > ${this.memSize}`);
         }
+
         this.mem.fill(0);
         this.mem.set(bytes);
         this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
@@ -42,31 +55,36 @@ export class NebulaVM {
         this.cycleCount = 0;
         this.debugLog = [];
         this.executionHistory = [];
+        this.interruptController.clearQueue();
+
         if (this.enableDebug) {
             this.debug(`Program flashed: ${bytes.length} bytes`);
         }
     }
 
-    /**
-     * Execute one instruction cycle
-     */
     step() {
-        // Process any pending interrupts before executing instruction
-        this.interruptController.processPendingInterrupts(this);
-
         if (this.halted) return;
 
         const currentPC = this.regs.pc;
-        const op = this.mem[this.regs.pc++];
-
-        if (this.enableDebug) {
-            this.debug(`PC: 0x${currentPC.toString(16).padStart(2, '0')} | OP: 0x${op.toString(16).padStart(2, '0')}`);
-        }
-
-        // Record execution history
-        this.recordExecution(currentPC, op);
+        let activeOpcode = null;
 
         try {
+            this.interruptController.processPendingInterrupts(this);
+            if (this.halted) return;
+
+            if (!Number.isInteger(this.regs.pc) || this.regs.pc < 0 || this.regs.pc >= this.memSize) {
+                throw new RangeError(`Program counter out of bounds: ${this.regs.pc}`);
+            }
+
+            const op = this.mem[this.regs.pc++];
+            activeOpcode = op;
+
+            if (this.enableDebug) {
+                this.debug(`PC: 0x${currentPC.toString(16).padStart(2, '0')} | OP: 0x${op.toString(16).padStart(2, '0')}`);
+            }
+
+            this.recordExecution(currentPC, op);
+
             switch (op) {
                 case 0x00: this.instr_HLT(); break;
                 case 0x01: this.instr_LDA(); break;
@@ -94,38 +112,37 @@ export class NebulaVM {
                 case 0x17: this.instr_SWAP(); break;
                 case 0x18: this.instr_NOP(); break;
                 default:
-                    if (this.enableDebug) {
-                        this.debug(`Invalid opcode: 0x${op.toString(16).padStart(2, '0')}`);
-                    }
+                    throw new RangeError(`Invalid opcode 0x${op.toString(16).padStart(2, '0')}`);
             }
         } catch (error) {
-            if (this.enableDebug) {
-                this.debug(`Execution error: ${error.message}`);
-            }
             this.halted = true;
+            if (this.enableDebug) {
+                this.debug(`Execution error: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            throw error;
         }
 
         this.cycleCount++;
     }
 
-    /**
-     * Run until HALT or max cycles reached
-     */
     run(maxCycles = 10000) {
+        if (!Number.isInteger(maxCycles) || maxCycles < 0) {
+            throw new RangeError('maxCycles must be a non-negative integer.');
+        }
+
         let cycles = 0;
         while (!this.halted && cycles < maxCycles) {
             this.step();
             cycles++;
         }
+
         return {
             cyclesRun: cycles,
             totalCycles: this.cycleCount,
             halted: this.halted,
-            registers: { ...this.regs }
+            registers: { ...this.regs },
         };
     }
-
-    // ============ INSTRUCTION IMPLEMENTATIONS ============
 
     instr_HLT() {
         this.halted = true;
@@ -133,14 +150,16 @@ export class NebulaVM {
     }
 
     instr_LDA() {
-        const val = this.mem[this.regs.pc++];
+        const val = this.readOperand();
         this.regs.a = val;
+        this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`LDA 0x${val.toString(16).padStart(2, '0')} -> A`);
     }
 
     instr_LDB() {
-        const val = this.mem[this.regs.pc++];
+        const val = this.readOperand();
         this.regs.b = val;
+        this.updateZeroFlag(this.regs.b);
         if (this.enableDebug) this.debug(`LDB 0x${val.toString(16).padStart(2, '0')} -> B`);
     }
 
@@ -166,18 +185,18 @@ export class NebulaVM {
     }
 
     instr_JZ() {
-        const addr = this.mem[this.regs.pc++];
+        const addr = this.readOperand();
         if (this.regs.zf) {
-            this.regs.pc = addr;
+            this.setPC(addr);
             if (this.enableDebug) this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (taken)`);
-        } else {
-            if (this.enableDebug) this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (not taken)`);
+        } else if (this.enableDebug) {
+            this.debug(`JZ: Jump not taken`);
         }
     }
 
     instr_JMP() {
-        const addr = this.mem[this.regs.pc++];
-        this.regs.pc = addr;
+        const addr = this.readOperand();
+        this.setPC(addr);
         if (this.enableDebug) this.debug(`JMP: Unconditional jump to 0x${addr.toString(16).padStart(2, '0')}`);
     }
 
@@ -201,10 +220,11 @@ export class NebulaVM {
 
     instr_DIV() {
         if (this.regs.b === 0) {
-            this.raiseInterrupt(0x06); // MATH_ERROR
+            this.raiseInterrupt(0x06);
             if (this.enableDebug) this.debug('DIV: Division by zero!');
             return;
         }
+
         const result = Math.floor(this.regs.a / this.regs.b);
         this.regs.a = result & 0xFF;
         this.updateZeroFlag(this.regs.a);
@@ -250,30 +270,28 @@ export class NebulaVM {
     }
 
     instr_STA() {
-        const addr = this.mem[this.regs.pc++];
-        if (addr >= this.memSize) {
-            if (this.enableDebug) this.debug(`STA: Address out of bounds: 0x${addr.toString(16).padStart(2, '0')}`);
-            return;
+        const addr = this.readOperand();
+        if (addr < 0 || addr >= this.memSize) {
+            throw new RangeError(`Memory write out of bounds: ${addr}`);
         }
         this.mem[addr] = this.regs.a;
         if (this.enableDebug) this.debug(`STA: A(0x${this.regs.a.toString(16).padStart(2, '0')}) -> [0x${addr.toString(16).padStart(2, '0')}]`);
     }
 
     instr_LDM() {
-        const addr = this.mem[this.regs.pc++];
-        if (addr >= this.memSize) {
-            if (this.enableDebug) this.debug(`LDM: Address out of bounds: 0x${addr.toString(16).padStart(2, '0')}`);
-            return;
+        const addr = this.readOperand();
+        if (addr < 0 || addr >= this.memSize) {
+            throw new RangeError(`Memory read out of bounds: ${addr}`);
         }
         this.regs.a = this.mem[addr];
+        this.updateZeroFlag(this.regs.a);
         if (this.enableDebug) this.debug(`LDM: [0x${addr.toString(16).padStart(2, '0')}](0x${this.regs.a.toString(16).padStart(2, '0')}) -> A`);
     }
 
     instr_STM() {
-        const addr = this.mem[this.regs.pc++];
-        if (addr >= this.memSize) {
-            if (this.enableDebug) this.debug(`STM: Address out of bounds: 0x${addr.toString(16).padStart(2, '0')}`);
-            return;
+        const addr = this.readOperand();
+        if (addr < 0 || addr >= this.memSize) {
+            throw new RangeError(`Memory write out of bounds: ${addr}`);
         }
         this.mem[addr] = this.regs.b;
         if (this.enableDebug) this.debug(`STM: B(0x${this.regs.b.toString(16).padStart(2, '0')}) -> [0x${addr.toString(16).padStart(2, '0')}]`);
@@ -304,10 +322,24 @@ export class NebulaVM {
         if (this.enableDebug) this.debug('NOP: No operation');
     }
 
-    // ============ UTILITY METHODS ============
+    readOperand() {
+        const pc = this.regs.pc;
+        if (!Number.isInteger(pc) || pc < 0 || pc >= this.memSize) {
+            throw new RangeError(`Operand fetch out of bounds at PC ${pc}`);
+        }
+        this.regs.pc += 1;
+        return this.mem[pc];
+    }
+
+    setPC(address) {
+        if (!Number.isInteger(address) || address < 0 || address >= this.memSize) {
+            throw new RangeError(`Jump target out of bounds: ${address}`);
+        }
+        this.regs.pc = address;
+    }
 
     updateZeroFlag(value) {
-        this.regs.zf = (value === 0) ? 1 : 0;
+        this.regs.zf = value === 0 ? 1 : 0;
     }
 
     debug(message) {
@@ -334,33 +366,24 @@ export class NebulaVM {
         this.interruptController.raiseInterrupt(interruptId);
     }
 
-    /**
-     * Get current VM state
-     */
     getState() {
         return {
             halted: this.halted,
             cycleCount: this.cycleCount,
             registers: { ...this.regs },
             memory: new Uint8Array(this.mem),
-            pc: this.regs.pc
+            pc: this.regs.pc,
         };
     }
 
-    /**
-     * Get debug information
-     */
     getDebugInfo() {
         return {
             debugLog: [...this.debugLog],
             executionHistory: [...this.executionHistory],
-            currentState: this.getState()
+            currentState: this.getState(),
         };
     }
 
-    /**
-     * Reset VM to initial state
-     */
     reset() {
         this.mem.fill(0);
         this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
@@ -368,5 +391,8 @@ export class NebulaVM {
         this.cycleCount = 0;
         this.debugLog = [];
         this.executionHistory = [];
+        this.interruptController.clearQueue();
     }
 }
+
+export default NebulaVM;

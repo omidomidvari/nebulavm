@@ -1,401 +1,250 @@
 import { InterruptController } from './interrupt.js';
+import { triggerCrashScreen } from '../crashscreen.js';
+import { MnemonicByOpcode } from './opcodes.js';
+import { NebulaError, NebulaErrorCode } from './errors.js';
 
 export interface Registers {
-    a: number;
-    b: number;
-    pc: number;
-    zf: number;
-    cf: number;
-    of: number;
+  a: number;
+  b: number;
+  pc: number;
+  zf: number;
+  cf: number;
+  of: number;
 }
 
 export interface ExecutionSnapshot {
-    pc: number;
-    op: number;
-    registers: Registers;
+  pc: number;
+  op: number;
+  registers: Registers;
 }
 
 export interface VMState {
-    halted: boolean;
-    cycleCount: number;
-    registers: Registers;
-    memory: Uint8Array;
-    pc: number;
+  halted: boolean;
+  cycleCount: number;
+  registers: Registers;
+  memory: Uint8Array;
+  pc: number;
 }
 
 export interface DebugInfo {
-    debugLog: string[];
-    executionHistory: ExecutionSnapshot[];
-    currentState: VMState;
+  debugLog: string[];
+  executionHistory: ExecutionSnapshot[];
+  currentState: VMState;
 }
 
 export interface ExecutionResult {
-    cyclesRun: number;
-    totalCycles: number;
-    halted: boolean;
-    registers: Registers;
+  cyclesRun: number;
+  totalCycles: number;
+  halted: boolean;
+  registers: Registers;
+}
+
+export class VMExecutionError extends NebulaError {
+  readonly pc: number;
+  readonly opcode: number | null;
+  readonly registers: Registers;
+
+  constructor(
+    code: NebulaErrorCode,
+    message: string,
+    context: { pc?: number; opcode?: number | null; registers?: Registers } = {},
+  ) {
+    const registers = context.registers ?? { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
+    super(code, message, {
+      pc: context.pc ?? null,
+      opcode: context.opcode ?? null,
+      registers,
+    });
+    this.name = 'VMExecutionError';
+    this.pc = context.pc ?? -1;
+    this.opcode = context.opcode ?? null;
+    this.registers = { ...registers };
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
 export class NebulaVM {
-    private memSize: number;
-    private mem: Uint8Array;
-    private regs: Registers;
-    private halted: boolean;
-    private cycleCount: number;
-    private interruptController: InterruptController;
-    private enableDebug: boolean;
-    private debugLog: string[];
-    private executionHistory: ExecutionSnapshot[];
-    private maxHistorySize: number;
+  private memSize: number;
+  private mem: Uint8Array;
+  private regs: Registers;
+  private halted: boolean;
+  private cycleCount: number;
+  private interruptController: InterruptController;
+  private enableDebug: boolean;
+  private debugLog: string[];
+  private executionHistory: ExecutionSnapshot[];
+  private maxHistorySize: number;
 
-    constructor(memSize: number = 256, enableDebug: boolean = false) {
-        this.memSize = memSize;
-        this.mem = new Uint8Array(memSize);
-        this.regs = {
-            a: 0,
-            b: 0,
-            pc: 0,
-            zf: 0,
-            cf: 0,
-            of: 0,
-        };
-        this.halted = true;
-        this.cycleCount = 0;
-        this.interruptController = new InterruptController();
-        this.enableDebug = enableDebug;
-        this.debugLog = [];
-        this.executionHistory = [];
-        this.maxHistorySize = 100;
+  constructor(memSize = 256, enableDebug = false) {
+    if (!Number.isInteger(memSize) || memSize < 1 || memSize > 256) {
+      throw new NebulaError(NebulaErrorCode.INVALID_ARGUMENT, 'memSize must be an integer from 1 to 256.', { memSize });
     }
 
-    flash(bytes: Uint8Array): void {
-        if (!(bytes instanceof Uint8Array)) {
-            throw new Error('flash() expects Uint8Array');
-        }
-        if (bytes.length > this.memSize) {
-            throw new Error(`Program too large: ${bytes.length} > ${this.memSize}`);
-        }
+    this.memSize = memSize;
+    this.mem = new Uint8Array(memSize);
+    this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
+    this.halted = true;
+    this.cycleCount = 0;
+    this.interruptController = new InterruptController();
+    this.enableDebug = enableDebug;
+    this.debugLog = [];
+    this.executionHistory = [];
+    this.maxHistorySize = 100;
+  }
 
-        this.mem.fill(0);
-        this.mem.set(bytes);
-        this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
-        this.halted = false;
-        this.cycleCount = 0;
-        this.debugLog = [];
-        this.executionHistory = [];
-
-        if (this.enableDebug) {
-            this.debug(`Program flashed: ${bytes.length} bytes`);
-        }
+  flash(bytes: Uint8Array): void {
+    if (!(bytes instanceof Uint8Array)) {
+      throw new NebulaError(NebulaErrorCode.INVALID_ARGUMENT, 'flash() expects Uint8Array.', { receivedType: typeof bytes });
+    }
+    if (bytes.length > this.memSize) {
+      throw new NebulaError(NebulaErrorCode.PROGRAM_TOO_LARGE, `Program too large: ${bytes.length} > ${this.memSize}`, {
+        programSize: bytes.length,
+        memorySize: this.memSize,
+      });
     }
 
-    step(): void {
-        this.interruptController.processPendingInterrupts(this);
+    this.mem.fill(0);
+    this.mem.set(bytes);
+    this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
+    this.halted = bytes.length === 0;
+    this.cycleCount = 0;
+    this.debugLog = [];
+    this.executionHistory = [];
+    this.interruptController.clearQueue();
+    if (this.enableDebug) this.debug(`Program flashed: ${bytes.length} bytes`);
+  }
 
-        if (this.halted) return;
+  step(): void {
+    if (this.halted) return;
 
-        const currentPC = this.regs.pc;
-        const op = this.mem[this.regs.pc++];
+    let currentPC = this.regs.pc;
+    let opcode: number | null = null;
 
-        if (this.enableDebug) {
-            this.debug(`PC: 0x${currentPC.toString(16).padStart(2, '0')} | OP: 0x${op.toString(16).padStart(2, '0')}`);
-        }
+    try {
+      this.interruptController.processPendingInterrupts(this);
+      if (this.halted) return;
 
-        this.recordExecution(currentPC, op);
+      currentPC = this.regs.pc;
+      if (!Number.isInteger(currentPC) || currentPC < 0 || currentPC >= this.memSize) {
+        throw this.vmError(NebulaErrorCode.PC_OUT_OF_BOUNDS, `Program counter out of bounds: ${currentPC}`, currentPC);
+      }
 
-        try {
-            switch (op) {
-                case 0x00: this.instr_HLT(); break;
-                case 0x01: this.instr_LDA(); break;
-                case 0x02: this.instr_LDB(); break;
-                case 0x03: this.instr_ADD(); break;
-                case 0x04: this.instr_SUB(); break;
-                case 0x05: this.instr_CMP(); break;
-                case 0x06: this.instr_JZ(); break;
-                case 0x07: this.instr_JMP(); break;
-                case 0x08: this.instr_SEI(); break;
-                case 0x09: this.instr_CLI(); break;
-                case 0x0A: this.instr_MUL(); break;
-                case 0x0B: this.instr_DIV(); break;
-                case 0x0C: this.instr_AND(); break;
-                case 0x0D: this.instr_OR(); break;
-                case 0x0E: this.instr_XOR(); break;
-                case 0x0F: this.instr_NOT(); break;
-                case 0x10: this.instr_SHL(); break;
-                case 0x11: this.instr_SHR(); break;
-                case 0x12: this.instr_STA(); break;
-                case 0x13: this.instr_LDM(); break;
-                case 0x14: this.instr_STM(); break;
-                case 0x15: this.instr_INC(); break;
-                case 0x16: this.instr_DEC(); break;
-                case 0x17: this.instr_SWAP(); break;
-                case 0x18: this.instr_NOP(); break;
-                default:
-                    if (this.enableDebug) {
-                        this.debug(`Invalid opcode: 0x${op.toString(16).padStart(2, '0')}`);
-                    }
-            }
-        } catch (error) {
-            if (this.enableDebug) {
-                this.debug(`Execution error: ${error instanceof Error ? error.message : String(error)}`);
-            }
-            this.halted = true;
-        }
+      opcode = this.mem[this.regs.pc++];
+      if (MnemonicByOpcode[opcode] === undefined) {
+        throw this.vmError(NebulaErrorCode.INVALID_OPCODE, `Invalid opcode 0x${opcode.toString(16).padStart(2, '0')}`, currentPC, opcode);
+      }
 
-        this.cycleCount++;
+      this.recordExecution(currentPC, opcode);
+      if (this.enableDebug) this.debug(`PC: 0x${currentPC.toString(16).padStart(2, '0')} | OP: 0x${opcode.toString(16).padStart(2, '0')}`);
+      this.execute(opcode);
+      this.cycleCount++;
+    } catch (error) {
+      this.halted = true;
+      const failure = error instanceof Error ? error : new Error(String(error));
+      if (this.enableDebug) this.debug(`Execution error: ${failure.message}`);
+      const code = error instanceof NebulaError ? error.code : NebulaErrorCode.UNKNOWN;
+      triggerCrashScreen('NEBULA_SYSTEM_FAILURE', {
+        code,
+        source: 'NebulaVM',
+        reason: failure.message,
+        stack: failure.stack || '',
+        pc: error instanceof VMExecutionError ? error.pc : currentPC,
+        opcode: error instanceof VMExecutionError ? error.opcode : opcode,
+        registers: { ...this.regs },
+      });
+      throw failure;
     }
+  }
 
-    run(maxCycles: number = 10000): ExecutionResult {
-        let cycles = 0;
-        while (!this.halted && cycles < maxCycles) {
-            this.step();
-            cycles++;
-        }
-
-        return {
-            cyclesRun: cycles,
-            totalCycles: this.cycleCount,
-            halted: this.halted,
-            registers: { ...this.regs },
-        };
+  private execute(op: number): void {
+    switch (op) {
+      case 0x00: this.halted = true; break;
+      case 0x01: this.regs.a = this.readOperand(); this.updateZeroFlag(this.regs.a); break;
+      case 0x02: this.regs.b = this.readOperand(); this.updateZeroFlag(this.regs.b); break;
+      case 0x03: { const result = this.regs.a + this.regs.b; this.regs.cf = result > 0xff ? 1 : 0; this.regs.a = result & 0xff; this.updateZeroFlag(this.regs.a); break; }
+      case 0x04: { const result = this.regs.a - this.regs.b; this.regs.cf = result < 0 ? 1 : 0; this.regs.a = result & 0xff; this.updateZeroFlag(this.regs.a); break; }
+      case 0x05: { const result = this.regs.a - this.regs.b; this.regs.cf = result < 0 ? 1 : 0; this.updateZeroFlag(result & 0xff); break; }
+      case 0x06: { const address = this.readOperand(); if (this.regs.zf) this.setPC(address); break; }
+      case 0x07: this.setPC(this.readOperand()); break;
+      case 0x08: this.interruptController.setInterruptsEnabled(true); break;
+      case 0x09: this.interruptController.setInterruptsEnabled(false); break;
+      case 0x0a: { const result = this.regs.a * this.regs.b; this.regs.cf = result > 0xff ? 1 : 0; this.regs.a = result & 0xff; this.updateZeroFlag(this.regs.a); break; }
+      case 0x0b: if (this.regs.b === 0) this.raiseInterrupt(0x06); else { this.regs.a = Math.floor(this.regs.a / this.regs.b); this.updateZeroFlag(this.regs.a); } break;
+      case 0x0c: this.regs.a &= this.regs.b; this.updateZeroFlag(this.regs.a); break;
+      case 0x0d: this.regs.a |= this.regs.b; this.updateZeroFlag(this.regs.a); break;
+      case 0x0e: this.regs.a ^= this.regs.b; this.updateZeroFlag(this.regs.a); break;
+      case 0x0f: this.regs.a = (~this.regs.a) & 0xff; this.updateZeroFlag(this.regs.a); break;
+      case 0x10: this.regs.cf = (this.regs.a & 0x80) ? 1 : 0; this.regs.a = (this.regs.a << 1) & 0xff; this.updateZeroFlag(this.regs.a); break;
+      case 0x11: this.regs.cf = this.regs.a & 1; this.regs.a >>= 1; this.updateZeroFlag(this.regs.a); break;
+      case 0x12: this.writeMemory(this.readOperand(), this.regs.a); break;
+      case 0x13: this.regs.a = this.readMemory(this.readOperand()); this.updateZeroFlag(this.regs.a); break;
+      case 0x14: this.writeMemory(this.readOperand(), this.regs.b); break;
+      case 0x15: { const result = this.regs.a + 1; this.regs.cf = result > 0xff ? 1 : 0; this.regs.a = result & 0xff; this.updateZeroFlag(this.regs.a); break; }
+      case 0x16: { const result = this.regs.a - 1; this.regs.cf = result < 0 ? 1 : 0; this.regs.a = result & 0xff; this.updateZeroFlag(this.regs.a); break; }
+      case 0x17: [this.regs.a, this.regs.b] = [this.regs.b, this.regs.a]; break;
+      case 0x18: break;
+      default: throw this.vmError(NebulaErrorCode.INVALID_OPCODE, `Invalid opcode ${op}`, this.regs.pc - 1, op);
     }
+  }
 
-    private instr_HLT(): void {
-        this.halted = true;
-        if (this.enableDebug) this.debug('HLT: Halt');
+  private readOperand(): number {
+    if (this.regs.pc < 0 || this.regs.pc >= this.memSize) {
+      throw this.vmError(NebulaErrorCode.OPERAND_OUT_OF_BOUNDS, `Operand fetch out of bounds at PC ${this.regs.pc}`, this.regs.pc);
     }
+    return this.mem[this.regs.pc++];
+  }
 
-    private instr_LDA(): void {
-        const val = this.mem[this.regs.pc++];
-        this.regs.a = val;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`LDA 0x${val.toString(16).padStart(2, '0')} -> A`);
+  private setPC(address: number): void {
+    if (!Number.isInteger(address) || address < 0 || address >= this.memSize) {
+      throw this.vmError(NebulaErrorCode.JUMP_OUT_OF_BOUNDS, `Jump target out of bounds: ${address}`, this.regs.pc);
     }
+    this.regs.pc = address;
+  }
 
-    private instr_LDB(): void {
-        const val = this.mem[this.regs.pc++];
-        this.regs.b = val;
-        this.updateZeroFlag(this.regs.b);
-        if (this.enableDebug) this.debug(`LDB 0x${val.toString(16).padStart(2, '0')} -> B`);
+  private readMemory(address: number): number {
+    if (address < 0 || address >= this.memSize) {
+      throw this.vmError(NebulaErrorCode.MEMORY_READ_OUT_OF_BOUNDS, `Memory read out of bounds: ${address}`, this.regs.pc);
     }
+    return this.mem[address];
+  }
 
-    private instr_ADD(): void {
-        const result = this.regs.a + this.regs.b;
-        this.regs.cf = result > 0xff ? 1 : 0;
-        this.regs.a = result & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`ADD: A(0x${this.regs.a.toString(16).padStart(2, '0')}) + B = 0x${result.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
+  private writeMemory(address: number, value: number): void {
+    if (address < 0 || address >= this.memSize) {
+      throw this.vmError(NebulaErrorCode.MEMORY_WRITE_OUT_OF_BOUNDS, `Memory write out of bounds: ${address}`, this.regs.pc);
     }
+    this.mem[address] = value & 0xff;
+  }
 
-    private instr_SUB(): void {
-        const result = this.regs.a - this.regs.b;
-        this.regs.cf = result < 0 ? 1 : 0;
-        this.regs.a = result & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`SUB: A(0x${this.regs.a.toString(16).padStart(2, '0')}) - B = 0x${result.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
+  private vmError(code: NebulaErrorCode, message: string, pc: number, opcode: number | null = null): VMExecutionError {
+    return new VMExecutionError(code, message, { pc, opcode, registers: { ...this.regs } });
+  }
+
+  private updateZeroFlag(value: number): void { this.regs.zf = value === 0 ? 1 : 0; }
+  private debug(message: string): void { if (this.enableDebug) { this.debugLog.push(`[Cycle ${this.cycleCount}] ${message}`); if (this.debugLog.length > 1000) this.debugLog.shift(); } }
+  private recordExecution(pc: number, op: number): void { this.executionHistory.push({ pc, op, registers: { ...this.regs } }); if (this.executionHistory.length > this.maxHistorySize) this.executionHistory.shift(); }
+
+  run(maxCycles = 10000): ExecutionResult {
+    if (!Number.isInteger(maxCycles) || maxCycles < 0) {
+      throw new NebulaError(NebulaErrorCode.INVALID_ARGUMENT, 'maxCycles must be a non-negative integer.', { maxCycles });
     }
+    let cycles = 0;
+    while (!this.halted && cycles < maxCycles) { this.step(); cycles++; }
+    return { cyclesRun: cycles, totalCycles: this.cycleCount, halted: this.halted, registers: { ...this.regs } };
+  }
 
-    private instr_CMP(): void {
-        const result = this.regs.a - this.regs.b;
-        this.regs.cf = result < 0 ? 1 : 0;
-        this.updateZeroFlag(result & 0xff);
-        if (this.enableDebug) this.debug(`CMP: A=0x${this.regs.a.toString(16).padStart(2, '0')}, B=0x${this.regs.b.toString(16).padStart(2, '0')}, ZF=${this.regs.zf}, CF=${this.regs.cf}`);
-    }
-
-    private instr_JZ(): void {
-        const addr = this.mem[this.regs.pc++];
-        if (this.regs.zf) {
-            this.regs.pc = addr;
-            if (this.enableDebug) this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (taken)`);
-        } else if (this.enableDebug) {
-            this.debug(`JZ: Jump to 0x${addr.toString(16).padStart(2, '0')} (not taken)`);
-        }
-    }
-
-    private instr_JMP(): void {
-        const addr = this.mem[this.regs.pc++];
-        this.regs.pc = addr;
-        if (this.enableDebug) this.debug(`JMP: Unconditional jump to 0x${addr.toString(16).padStart(2, '0')}`);
-    }
-
-    private instr_SEI(): void {
-        this.interruptController.setInterruptsEnabled(true);
-        if (this.enableDebug) this.debug('SEI: Interrupts enabled');
-    }
-
-    private instr_CLI(): void {
-        this.interruptController.setInterruptsEnabled(false);
-        if (this.enableDebug) this.debug('CLI: Interrupts disabled');
-    }
-
-    private instr_MUL(): void {
-        const result = this.regs.a * this.regs.b;
-        this.regs.cf = result > 0xff ? 1 : 0;
-        this.regs.a = result & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`MUL: A(0x${this.regs.a.toString(16).padStart(2, '0')}) * B = 0x${result.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
-    }
-
-    private instr_DIV(): void {
-        if (this.regs.b === 0) {
-            this.raiseInterrupt(0x06);
-            if (this.enableDebug) this.debug('DIV: Division by zero!');
-            return;
-        }
-
-        const result = Math.floor(this.regs.a / this.regs.b);
-        this.regs.a = result & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`DIV: A(0x${this.regs.a.toString(16).padStart(2, '0')}) / B = 0x${result.toString(16).padStart(2, '0')}`);
-    }
-
-    private instr_AND(): void {
-        this.regs.a = this.regs.a & this.regs.b;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`AND: A &= B -> 0x${this.regs.a.toString(16).padStart(2, '0')}`);
-    }
-
-    private instr_OR(): void {
-        this.regs.a = this.regs.a | this.regs.b;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`OR: A |= B -> 0x${this.regs.a.toString(16).padStart(2, '0')}`);
-    }
-
-    private instr_XOR(): void {
-        this.regs.a = this.regs.a ^ this.regs.b;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`XOR: A ^= B -> 0x${this.regs.a.toString(16).padStart(2, '0')}`);
-    }
-
-    private instr_NOT(): void {
-        this.regs.a = (~this.regs.a) & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`NOT: A = ~A -> 0x${this.regs.a.toString(16).padStart(2, '0')}`);
-    }
-
-    private instr_SHL(): void {
-        this.regs.cf = (this.regs.a & 0x80) ? 1 : 0;
-        this.regs.a = (this.regs.a << 1) & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`SHL: A <<= 1 -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
-    }
-
-    private instr_SHR(): void {
-        this.regs.cf = this.regs.a & 0x01;
-        this.regs.a = this.regs.a >> 1;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`SHR: A >>= 1 -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
-    }
-
-    private instr_STA(): void {
-        const addr = this.mem[this.regs.pc++];
-        if (addr >= this.memSize) {
-            if (this.enableDebug) this.debug(`STA: Address out of bounds: 0x${addr.toString(16).padStart(2, '0')}`);
-            return;
-        }
-        this.mem[addr] = this.regs.a;
-        if (this.enableDebug) this.debug(`STA: A(0x${this.regs.a.toString(16).padStart(2, '0')}) -> [0x${addr.toString(16).padStart(2, '0')}]`);
-    }
-
-    private instr_LDM(): void {
-        const addr = this.mem[this.regs.pc++];
-        if (addr >= this.memSize) {
-            if (this.enableDebug) this.debug(`LDM: Address out of bounds: 0x${addr.toString(16).padStart(2, '0')}`);
-            return;
-        }
-        this.regs.a = this.mem[addr];
-        if (this.enableDebug) this.debug(`LDM: [0x${addr.toString(16).padStart(2, '0')}](0x${this.regs.a.toString(16).padStart(2, '0')}) -> A`);
-    }
-
-    private instr_STM(): void {
-        const addr = this.mem[this.regs.pc++];
-        if (addr >= this.memSize) {
-            if (this.enableDebug) this.debug(`STM: Address out of bounds: 0x${addr.toString(16).padStart(2, '0')}`);
-            return;
-        }
-        this.mem[addr] = this.regs.b;
-        if (this.enableDebug) this.debug(`STM: B(0x${this.regs.b.toString(16).padStart(2, '0')}) -> [0x${addr.toString(16).padStart(2, '0')}]`);
-    }
-
-    private instr_INC(): void {
-        const result = this.regs.a + 1;
-        this.regs.cf = result > 0xff ? 1 : 0;
-        this.regs.a = result & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`INC: A++ -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
-    }
-
-    private instr_DEC(): void {
-        const result = this.regs.a - 1;
-        this.regs.cf = result < 0 ? 1 : 0;
-        this.regs.a = result & 0xff;
-        this.updateZeroFlag(this.regs.a);
-        if (this.enableDebug) this.debug(`DEC: A-- -> 0x${this.regs.a.toString(16).padStart(2, '0')}, CF=${this.regs.cf}`);
-    }
-
-    private instr_SWAP(): void {
-        [this.regs.a, this.regs.b] = [this.regs.b, this.regs.a];
-        if (this.enableDebug) this.debug(`SWAP: A <-> B (A=0x${this.regs.a.toString(16).padStart(2, '0')}, B=0x${this.regs.b.toString(16).padStart(2, '0')})`);
-    }
-
-    private instr_NOP(): void {
-        if (this.enableDebug) this.debug('NOP: No operation');
-    }
-
-    private updateZeroFlag(value: number): void {
-        this.regs.zf = value === 0 ? 1 : 0;
-    }
-
-    private debug(message: string): void {
-        if (this.enableDebug) {
-            this.debugLog.push(`[Cycle ${this.cycleCount}] ${message}`);
-            if (this.debugLog.length > 1000) {
-                this.debugLog.shift();
-            }
-        }
-    }
-
-    private recordExecution(pc: number, op: number): void {
-        this.executionHistory.push({ pc, op, registers: { ...this.regs } });
-        if (this.executionHistory.length > this.maxHistorySize) {
-            this.executionHistory.shift();
-        }
-    }
-
-    getInterruptController(): InterruptController {
-        return this.interruptController;
-    }
-
-    raiseInterrupt(interruptId: number): void {
-        this.interruptController.raiseInterrupt(interruptId);
-    }
-
-    getState(): VMState {
-        return {
-            halted: this.halted,
-            cycleCount: this.cycleCount,
-            registers: { ...this.regs },
-            memory: new Uint8Array(this.mem),
-            pc: this.regs.pc,
-        };
-    }
-
-    getDebugInfo(): DebugInfo {
-        return {
-            debugLog: [...this.debugLog],
-            executionHistory: [...this.executionHistory],
-            currentState: this.getState(),
-        };
-    }
-
-    reset(): void {
-        this.mem.fill(0);
-        this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
-        this.halted = true;
-        this.cycleCount = 0;
-        this.debugLog = [];
-        this.executionHistory = [];
-    }
+  getInterruptController(): InterruptController { return this.interruptController; }
+  raiseInterrupt(interruptId: number): void { this.interruptController.raiseInterrupt(interruptId); }
+  getState(): VMState { return { halted: this.halted, cycleCount: this.cycleCount, registers: { ...this.regs }, memory: new Uint8Array(this.mem), pc: this.regs.pc }; }
+  getDebugInfo(): DebugInfo { return { debugLog: [...this.debugLog], executionHistory: [...this.executionHistory], currentState: this.getState() }; }
+  reset(): void {
+    this.mem.fill(0);
+    this.regs = { a: 0, b: 0, pc: 0, zf: 0, cf: 0, of: 0 };
+    this.halted = true;
+    this.cycleCount = 0;
+    this.debugLog = [];
+    this.executionHistory = [];
+    this.interruptController.clearQueue();
+  }
 }
 
 export default NebulaVM;

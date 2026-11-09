@@ -14,6 +14,6 @@
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts", "filemgr/**/*.ts", "main.ts", "tests/**/*.js", "nebulalaassembeler.js"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "filemgr/**/*.ts", "main.ts", "nebulalaassembeler.js"],
+  "exclude": ["node_modules", "dist", "tests"]
 }
