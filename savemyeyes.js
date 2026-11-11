@@ -1,36 +1,22 @@
-import { serialout } from './nebulavm.js';
-// this is a program to filter out the output and warn of flasing images.
-const filterlimitchar = 8000;
-const localizedserialout = serialout;
+const DEFAULT_LIMIT = 8000;
 
-// character counter
-let charCount = 0;
-
-
-function countAllASCII(input) {
-    if (typeof input !== "string") {
-        throw new Error("Input must be a string.");
-    }
-
-    let asciiCount = 0;
-
-    for (let char of input) {
-        let code = char.charCodeAt(0);
-        // ASCII range: 0–127
-        if (code >= 0 && code <= 127) {
-            asciiCount++;
-        }
-    }
-
-    return asciiCount;
+export function countAscii(input) {
+  if (typeof input !== 'string') throw new TypeError('Input must be a string.');
+  let count = 0;
+  for (const character of input) {
+    if (character.codePointAt(0) <= 0x7f) count += 1;
+  }
+  return count;
 }
 
-countedcharacters = countAllASCII(localizedserialout);
-
-if (countedcharacters > filterlimitchar) {
-  console.warn("a lot of characters will be outputted, this may cause flashing images.");
-  console.warn("characters: " + countedcharacters);
-  setTimeout(() => {
-    console.warn("flashing images warning: " + countedcharacters + " characters will be outputted.");
-  }, 1000);
+/** Keep large diagnostics readable and avoid dumping unbounded output. */
+export function limitOutput(input, maxChars = DEFAULT_LIMIT, warn = console.warn) {
+  const text = String(input);
+  if (!Number.isInteger(maxChars) || maxChars < 1) throw new RangeError('maxChars must be a positive integer.');
+  if (text.length <= maxChars) return text;
+  if (typeof warn === 'function') warn(`Output truncated from ${text.length} to ${maxChars} characters.`);
+  const suffix = '\n… output truncated …';
+  return text.slice(0, Math.max(0, maxChars - suffix.length)) + suffix.slice(0, maxChars);
 }
+
+export default limitOutput;

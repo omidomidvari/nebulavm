@@ -1,9 +1,19 @@
-// error limiting program
-import { errorcode } from './errorcodes.js';
-const errorcodelimit = 11000;
+export class ErrorLimit {
+  constructor(maxErrors = 20) {
+    this.maxErrors = Number.isInteger(maxErrors) && maxErrors > 0 ? maxErrors : 20;
+    this.count = 0;
+  }
 
+  /** Returns true while an error is within the allowed report budget. */
+  allow() {
+    this.count += 1;
+    return this.count <= this.maxErrors;
+  }
 
-    if (error >= errorcodelimit || error === undefined) {
-     console.warn("error 11000 or undefined error has been deteced.")   
-     require('./beyondfatalerror.js')
+  reset() {
+    this.count = 0;
+  }
 }
+
+export const errorLimit = new ErrorLimit();
+export default errorLimit;
